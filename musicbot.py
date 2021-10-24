@@ -15,9 +15,7 @@ bot.remove_command('help')
 async def on_ready():
     print(f"{bot.user.name} is ready.")
     await bot.change_presence(activity=discord.Activity(
-            type=discord.ActivityType.listening,
-            name='commands'
-    ))
+            type=discord.ActivityType.listening, name='commands'))
 
 
 class Player(commands.Cog):
