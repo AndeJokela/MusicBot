@@ -1,3 +1,8 @@
+"""
+MusicBot
+"""
+
+
 import yt_dlp.YoutubeDL
 import discord
 from discord.ext import commands
@@ -65,15 +70,17 @@ class Player(commands.Cog):
             await ctx.send("Searching...")
             info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(
                 self.YTDL_OPTIONS).extract_info(f"ytsearch:{song}", download=False, ie_key="YoutubeSearch"))
-            if info is None:
-                return
-            info = info['entries'][0]
+            if info['entries'] is None or info['entries'] == []:
+                return await ctx.send("Couldn't find song.")
+            else:
+                info = info['entries'][0]
 
         # when song is URL
         else:
-            info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(self.YTDL_OPTIONS).extract_info(song, download=False))
-            if info is None:
-                return
+            try:
+                info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(self.YTDL_OPTIONS).extract_info(song, download=False))
+            except Exception:
+                return await ctx.send("Couldn't find song.")
 
         url = info['formats'][4]['url']
         title = info['title']
@@ -201,7 +208,7 @@ class Player(commands.Cog):
     async def help(self, ctx):
         embed = discord.Embed(
             title="Commands",
-            description="play \n skip \n queue \n clear \n pause \n resume ",
+            description="play\nskip\nqueue\nclear\npause\nresume ",
             colour=discord.Colour.blue()
         )
         await ctx.send(embed=embed)
@@ -213,4 +220,5 @@ async def setup():
 
 
 bot.loop.create_task(setup())
+
 bot.run("TOKEN")  # Replace TOKEN with your discord bot token
