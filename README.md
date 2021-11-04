@@ -1,5 +1,5 @@
 # MusicBot
-A discord music bot.
+A discord.py music bot.
 
 ## Requirements
 ### Packages
