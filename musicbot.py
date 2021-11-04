@@ -1,5 +1,7 @@
 """
 MusicBot
+
+Searches and plays music from youtube.
 """
 
 
@@ -18,7 +20,7 @@ bot.remove_command('help')
 
 @bot.event
 async def on_ready():
-    print(f"{bot.user.name} is ready.")
+    print(f"{bot.user.name} is ready.\n")
     await bot.change_presence(activity=discord.Activity(
             type=discord.ActivityType.listening, name='commands'))
 
@@ -54,6 +56,7 @@ class Player(commands.Cog):
     async def check_queue(self, ctx):
         if len(self.song_queue[ctx.guild.id]) > 0:
             await self.play_song(ctx, self.song_queue[ctx.guild.id][0][0], self.song_queue[ctx.guild.id][0][1])
+
             if len(self.song_queue[ctx.guild.id]) > 0:
                 self.song_queue[ctx.guild.id].pop(0)
             self.is_playing = True
@@ -68,8 +71,9 @@ class Player(commands.Cog):
         # when song isn't URL
         if not ("youtube.com/watch?" in song or "https://youtu.be/" in song):
             await ctx.send("Searching...")
-            info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(
-                self.YTDL_OPTIONS).extract_info(f"ytsearch:{song}", download=False, ie_key="YoutubeSearch"))
+
+            info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(self.YTDL_OPTIONS).extract_info(f"ytsearch:{song}", download=False, ie_key="YoutubeSearch"))
+
             if info['entries'] is None or info['entries'] == []:
                 return await ctx.send("Couldn't find song.")
             else:
@@ -92,7 +96,7 @@ class Player(commands.Cog):
             await self.check_queue(ctx)
 
         else:
-            print(f"\nQueued - Position {queue_len + 1}\n{title}\n")
+            print(f"Queued - Position {queue_len + 1}\n{title}\n")
             embed = discord.Embed(
                 title=f"Queued - Position {queue_len + 1}",
                 description=title,
@@ -101,17 +105,18 @@ class Player(commands.Cog):
             await ctx.send(embed=embed)
 
     async def play_song(self, ctx, url, title):
+
+        print(f"Playing: {title}\n{url}\n")
+        embed = discord.Embed(
+                    title=":arrow_forward: Now playing :arrow_forward:",
+                    description=title,
+                    colour=discord.Colour.blue()
+        )
+        await ctx.send(embed=embed)
+
+        await bot.change_presence(activity=discord.Game(title))
+
         try:
-            print(f"\nPlaying: {title}\n{url}\n")
-            embed = discord.Embed(
-                        title=":arrow_forward: Now playing :arrow_forward:",
-                        description=title,
-                        colour=discord.Colour.blue()
-            )
-            await ctx.send(embed=embed)
-
-            await bot.change_presence(activity=discord.Game(title))
-
             ctx.voice_client.play((discord.FFmpegOpusAudio(
                     url, **self.FFMPEG_OPTIONS, codec="copy")),
                               after=lambda error:
@@ -120,11 +125,14 @@ class Player(commands.Cog):
         except Exception:
             await ctx.send("Could not play song, skipping")
             ctx.voice_client.stop()
+            await bot.change_presence(
+                activity=discord.Activity(type=discord.ActivityType.listening,
+                                          name='commands'))
             self.bot.loop.create_task(self.check_queue(ctx))
 
     @commands.command()
     async def leave(self, ctx):
-        print("Leaving", ctx.author.voice.channel)
+        print(f"Leaving {ctx.author.voice.channel}\n")
         if ctx.voice_client is not None:
             return await ctx.voice_client.disconnect()
 
@@ -138,7 +146,7 @@ class Player(commands.Cog):
                     "Please connect to the channel you want the bot to join.")
             else:
                 await ctx.author.voice.channel.connect()
-                print("Joining:", ctx.author.voice.channel)
+                print(f"Joining: {ctx.author.voice.channel}\n")
 
         if song is None:
             return await ctx.send("You must include a song to play.")
@@ -165,7 +173,7 @@ class Player(commands.Cog):
 
     @commands.command()
     async def skip(self, ctx):
-        print("Skipping")
+        print("Skipping\n")
         if ctx.voice_client is None:
             return await ctx.send("I am not playing any song.")
 
@@ -180,7 +188,8 @@ class Player(commands.Cog):
 
     @commands.command()
     async def clear(self, ctx):
-        print(f"Cleared {len(self.song_queue[ctx.guild.id])} songs from queue")
+        queue_len = len(self.song_queue[ctx.guild.id])
+        print(f"Cleared {queue_len} songs from queue\n")
         self.song_queue[ctx.guild.id].clear()
         await ctx.send(f":white_check_mark: Song queue cleared")
 
