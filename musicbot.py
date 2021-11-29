@@ -86,9 +86,10 @@ class Player(commands.Cog):
         print(f"Extracting info: {song}")
         # when song isn't URL
         if not ("youtube.com/watch?" in song or "https://youtu.be/" in song):
-            await ctx.send("Searching...")
+            message = await ctx.send("Searching...")
 
             info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(self.YTDL_OPTIONS).extract_info(f"ytsearch:{song}", download=False, ie_key="YoutubeSearch"))
+            await message.delete()
 
             if info['entries'] is None or info['entries'] == []:
                 await ctx.send("Couldn't find song.")
@@ -104,7 +105,16 @@ class Player(commands.Cog):
                 await ctx.send("Couldn't find song.")
                 return
 
-        url = info['formats'][4]['url']
+        url = None
+        try:
+            for video_format in info["formats"]:
+                if video_format["format_id"] == "251":
+                    url = video_format["url"]
+                    break
+        except KeyError:
+            await ctx.send("Couldn't find song.")
+            return
+
         title = info['title']
 
         queue_len = len(self.song_queue)
@@ -126,7 +136,7 @@ class Player(commands.Cog):
 
         print(f"Playing: {title}\n")
         embed = discord.Embed(
-                    title=":arrow_forward: Now playing :arrow_forward:",
+                    title="Now Playing",
                     description=title,
                     colour=discord.Colour.blue()
         )
@@ -135,10 +145,9 @@ class Player(commands.Cog):
         await bot.change_presence(activity=discord.Game(title))
 
         try:
-            ctx.voice_client.play((discord.FFmpegOpusAudio(
-                    url, **self.FFMPEG_OPTIONS, codec="copy")),
-                              after=lambda error:
-                              self.bot.loop.create_task(self.check_queue(ctx)))
+            source = discord.FFmpegOpusAudio(url, **self.FFMPEG_OPTIONS, codec="copy")
+
+            ctx.voice_client.play(source, after=lambda error: self.bot.loop.create_task(self.check_queue(ctx)))
 
         except Exception:
             await ctx.send("Could not play song, skipping")
@@ -160,17 +169,19 @@ class Player(commands.Cog):
 
     @commands.command()
     async def play(self, ctx, *, song=None):
-        if not self.timer_on:
-            bot.loop.create_task(self.leave_timer(ctx))
+        if song is None:
+            await ctx.send("You must include a song to play.")
+            return
 
         if ctx.voice_client is None:
             if ctx.author.voice is None:
-                return await ctx.send(
+                await ctx.send(
                     "Please connect to the channel you want the bot to join.")
+                return
             else:
                 await ctx.author.voice.channel.connect()
                 self.bot_vc = ctx.author.voice.channel
-                print(f"Joining: {ctx.author.voice.channel}\n")
+                print(f"Joining: {self.bot_vc}\n")
 
         if self.bot_vc != ctx.author.voice.channel:
             await ctx.send("Changing voice channel...")
@@ -178,10 +189,45 @@ class Player(commands.Cog):
             print(f"Changing channel:{self.bot_vc} to {ctx.author.voice.channel}")
             self.bot_vc = ctx.author.voice.channel
 
+        if not self.timer_on:
+            bot.loop.create_task(self.leave_timer(ctx))
+
+        await self.search_song(ctx, song)
+
+    @commands.command()
+    async def remove(self, ctx, *, song=None):
+        if len(self.song_queue) == 0:
+            await ctx.send(f"Song queue is empty.")
+            return
+
         if song is None:
-            return await ctx.send("You must include a song to play.")
+            await ctx.send("You must include a song number to remove!")
+        elif song == "last":
+            try:
+                title = self.song_queue.pop(-1)[1]
+                await ctx.send(f"Removed {title}")
+            except IndexError:
+                await ctx.send(f"Song queue is empty.")
         else:
-            await self.search_song(ctx, song)
+            try:
+                song_index = int(song) - 1
+                if song_index == -1:
+                    await ctx.send("Invalid song number!")
+                    return
+
+            except ValueError:
+                await ctx.send(f"You must include the song number!")
+                return
+
+            try:
+                title = self.song_queue[song_index][1]
+                self.song_queue.pop(song_index)
+                print(
+                    f"Removed {song_index+1}. {title}"
+                )
+                await ctx.send(f"Removed **{song_index+1}.** {title}")
+            except IndexError:
+                await ctx.send("Invalid song number!")
 
     @commands.command()
     async def queue(self, ctx):  # display the current guilds queue
@@ -251,14 +297,15 @@ class Player(commands.Cog):
     async def help(self, ctx):
         embed = discord.Embed(
             title="Commands",
-            description="!play 'song name or link': Plays song from youtube\n"
-                        "!skip: Skips current song\n"
-                        "!move: Moves bot to user's voice channel\n"
-                        "!queue: Shows current song queue\n"
-                        "!clear: Clears song queue, doesn't skip\n"
-                        "!pause: Pauses current song\n"
-                        "!resume: Resumes current song\n"
-                        "!leave: Disconnects the bot from voice",
+            description="**!play** 'name or link': Plays song from youtube\n"
+                        "**!skip**: Skips current song\n"
+                        "**!remove** 'song number': Removes song from queue\n"
+                        "**!move**: Moves bot to user's voice channel\n"
+                        "**!queue**: Shows current song queue\n"
+                        "**!clear**: Clears song queue, doesn't skip\n"
+                        "**!pause**: Pauses current song\n"
+                        "**!resume**: Resumes current song\n"
+                        "**!leave**: Disconnects the bot from voice",
             colour=discord.Colour.blue()
         )
         await ctx.send(embed=embed)
