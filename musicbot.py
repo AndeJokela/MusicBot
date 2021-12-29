@@ -6,10 +6,13 @@ Searches and plays music from youtube.
 
 import time
 import asyncio
-import yt_dlp.YoutubeDL
+import youtube_dl.YoutubeDL
 import discord
 from discord.ext import commands
 
+token = input("Enter bot token: ")
+
+ytdl = youtube_dl.YoutubeDL
 
 intents = discord.Intents.default()
 intents.members = True
@@ -38,8 +41,6 @@ class Player(commands.Cog):
         self.FFMPEG_OPTIONS = {
             'before_options': '-referer "https://www.youtube.com/" '
                               '-user_agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36" '
-                              '-reconnect 1 '
-                              '-reconnect_streamed 1 '
                               '-reconnect_on_network_error 1 '
                               '-reconnect_delay_max 5',
             'options': '-vn'
@@ -83,39 +84,50 @@ class Player(commands.Cog):
             self.end_time = time.perf_counter()
 
     async def search_song(self, ctx, song):
-        print(f"Extracting info: {song}")
-        # when song isn't URL
-        if not ("youtube.com/watch?" in song or "https://youtu.be/" in song):
-            message = await ctx.send("Searching...")
-
-            info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(self.YTDL_OPTIONS).extract_info(f"ytsearch:{song}", download=False, ie_key="YoutubeSearch"))
-            await message.delete()
-
-            if info['entries'] is None or info['entries'] == []:
-                await ctx.send("Couldn't find song.")
-                return
-            else:
-                info = info['entries'][0]
-
-        # when song is URL
-        else:
-            try:
-                info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(self.YTDL_OPTIONS).extract_info(song, download=False))
-            except Exception:
-                await ctx.send("Couldn't find song.")
-                return
-
         url = None
+        title = None
+
+        print(f"Extracting info: {song}")
+
         try:
-            for video_format in info["formats"]:
-                if video_format["format_id"] == "251":
-                    url = video_format["url"]
-                    break
-        except KeyError:
+            if "youtube.com/watch?" in song or "https://youtu.be/" in song:
+                info = await self.bot.loop.run_in_executor(None, lambda: ytdl(self.YTDL_OPTIONS).extract_info(song, download=False))
+
+                title = info['title']
+                for video_format in info["formats"]:
+                    if video_format["format_id"] == "251":
+                        url = video_format["url"]
+                        break
+
+            elif "soundcloud" in song:
+                info = await self.bot.loop.run_in_executor(None, lambda: ytdl(self.YTDL_OPTIONS).extract_info(song, download=False))
+
+                title = info["uploader"] + " - " + info["title"]
+                for video_format in info["formats"]:
+                    if video_format["format_id"] == "hls_opus_64":
+                        url = video_format["url"]
+                        break
+
+            else:
+                message = await ctx.send("Searching...")
+                info = await self.bot.loop.run_in_executor(None, lambda: ytdl(self.YTDL_OPTIONS).extract_info(f"ytsearch:{song}", download=False, ie_key="YoutubeSearch"))
+
+                await message.delete()
+
+                if info is None or info['entries'] == []:
+                    await ctx.send("Couldn't find song.")
+                    return
+
+                else:
+                    info = info['entries'][0]
+                    title = info['title']
+                    for video_format in info["formats"]:
+                        if video_format["format_id"] == "251":
+                            url = video_format["url"]
+                            break
+        except Exception:
             await ctx.send("Couldn't find song.")
             return
-
-        title = info['title']
 
         queue_len = len(self.song_queue)
         self.song_queue.append([url, title])
@@ -181,7 +193,7 @@ class Player(commands.Cog):
             else:
                 await ctx.author.voice.channel.connect()
                 self.bot_vc = ctx.author.voice.channel
-                print(f"Joining: {self.bot_vc}\n")
+                print(f"Joining {self.bot_vc}\n")
 
         if self.bot_vc != ctx.author.voice.channel:
             await ctx.send("Changing voice channel...")
@@ -317,5 +329,4 @@ async def setup():
 
 
 bot.loop.create_task(setup())
-
-bot.run("TOKEN")  # Replace TOKEN with your discord bot token
+bot.run(token)
