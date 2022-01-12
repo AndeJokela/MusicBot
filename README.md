@@ -3,7 +3,7 @@ A discord.py music bot.
 
 ## Requirements
 ### Packages
-youtube_dl  
+yt-dlp 
 discord.py  
 PyNaCl (for discord.py voice)  
 
